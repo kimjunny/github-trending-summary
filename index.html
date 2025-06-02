@@ -1,159 +1,461 @@
-// Node.js 서버 예제 (Express + Puppeteer)
-const express = require('express');
-const puppeteer = require('puppeteer');
-const app = express();
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub 트렌딩 리포지토리 요약</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-// CORS 설정
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
-    next();
-});
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+            color: #c9d1d9;
+            min-height: 100vh;
+            padding: 20px;
+        }
 
-// GitHub 트렌딩 스크래핑 함수
-async function scrapeTrending() {
-    const browser = await puppeteer.launch();
-    const page = await browser.newPage();
-    
-    try {
-        await page.goto('https://github.com/trending');
-        
-        // 트렌딩 리포지토리 정보 추출
-        const repos = await page.evaluate(() => {
-            const repoElements = document.querySelectorAll('article.Box-row');
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            animation: fadeInDown 0.8s ease;
+        }
+
+        .header h1 {
+            font-size: 3em;
+            background: linear-gradient(45deg, #58a6ff, #79c0ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            color: #8b949e;
+        }
+
+        .date {
+            text-align: center;
+            font-size: 1.1em;
+            color: #58a6ff;
+            margin-bottom: 30px;
+        }
+
+        .repos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            animation: fadeInUp 0.8s ease;
+        }
+
+        .repo-card {
+            background: rgba(22, 27, 34, 0.8);
+            border: 1px solid #30363d;
+            border-radius: 15px;
+            padding: 25px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .repo-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #58a6ff, #79c0ff);
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+        }
+
+        .repo-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(88, 166, 255, 0.2);
+            border-color: #58a6ff;
+        }
+
+        .repo-card:hover::before {
+            transform: translateX(0);
+        }
+
+        .repo-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .repo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #58a6ff, #79c0ff);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 20px;
+        }
+
+        .repo-name {
+            font-size: 1.3em;
+            color: #58a6ff;
+            font-weight: 600;
+        }
+
+        .repo-description {
+            color: #c9d1d9;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .repo-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .tag {
+            background: rgba(88, 166, 255, 0.1);
+            color: #58a6ff;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            border: 1px solid rgba(88, 166, 255, 0.3);
+        }
+
+        .repo-link {
+            display: inline-flex;
+            align-items: center;
+            color: #58a6ff;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
+        }
+
+        .repo-link:hover {
+            color: #79c0ff;
+        }
+
+        .repo-link svg {
+            margin-left: 5px;
+            transition: transform 0.3s ease;
+        }
+
+        .repo-link:hover svg {
+            transform: translateX(3px);
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .category {
+            margin-bottom: 40px;
+        }
+
+        .category-title {
+            font-size: 1.8em;
+            color: #58a6ff;
+            margin-bottom: 20px;
+            padding-left: 10px;
+            border-left: 4px solid #58a6ff;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2em;
+            }
             
-            return Array.from(repoElements).map(repo => {
-                const nameElement = repo.querySelector('h2 a');
-                const descElement = repo.querySelector('p');
-                const langElement = repo.querySelector('[itemprop="programmingLanguage"]');
-                const starsElement = repo.querySelector('svg.octicon-star').parentElement;
-                
-                return {
-                    name: nameElement ? nameElement.textContent.trim() : '',
-                    url: nameElement ? 'https://github.com' + nameElement.getAttribute('href') : '',
-                    description: descElement ? descElement.textContent.trim() : '',
-                    language: langElement ? langElement.textContent.trim() : '',
-                    stars: starsElement ? starsElement.textContent.trim() : ''
-                };
+            .repos-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>GitHub 트렌딩 리포지토리</h1>
+            <p>오늘의 가장 인기 있는 오픈소스 프로젝트들</p>
+        </div>
+        
+        <div class="date" id="current-date"></div>
+
+        <div class="category">
+            <h2 class="category-title">🤖 AI & 머신러닝</h2>
+            <div class="repos-grid">
+                <div class="repo-card">
+                    <div class="repo-header">
+                        <div class="repo-icon">🧠</div>
+                        <div class="repo-name">getzep/graphiti</div>
+                    </div>
+                    <div class="repo-description">
+                        AI 에이전트를 위한 실시간 지식 그래프 구축 도구입니다. 복잡한 정보를 구조화하고 AI가 더 효과적으로 이해하고 활용할 수 있도록 도와줍니다.
+                    </div>
+                    <div class="repo-tags">
+                        <span class="tag">Knowledge Graph</span>
+                        <span class="tag">AI Agent</span>
+                        <span class="tag">Real-time</span>
+                    </div>
+                    <a href="https://github.com/getzep/graphiti" class="repo-link" target="_blank">
+                        리포지토리 방문
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 8.5H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>
+                        </svg>
+                    </a>
+                </div>
+
+                <div class="repo-card">
+                    <div class="repo-header">
+                        <div class="repo-icon">🤖</div>
+                        <div class="repo-name">Agent S</div>
+                    </div>
+                    <div class="repo-description">
+                        인간처럼 컴퓨터를 사용하는 오픈 에이전트 프레임워크입니다. GUI 자동화와 지능형 작업 수행을 가능하게 합니다.
+                    </div>
+                    <div class="repo-tags">
+                        <span class="tag">AI Agent</span>
+                        <span class="tag">Automation</span>
+                        <span class="tag">GUI</span>
+                    </div>
+                    <a href="#" class="repo-link">
+                        리포지토리 방문
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 8.5H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>
+                        </svg>
+                    </a>
+                </div>
+
+                <div class="repo-card">
+                    <div class="repo-header">
+                        <div class="repo-icon">🔥</div>
+                        <div class="repo-name">Burn</div>
+                    </div>
+                    <div class="repo-description">
+                        유연성, 효율성, 이식성을 타협하지 않는 차세대 딥러닝 프레임워크입니다. Rust로 작성되어 높은 성능을 제공합니다.
+                    </div>
+                    <div class="repo-tags">
+                        <span class="tag">Deep Learning</span>
+                        <span class="tag">Rust</span>
+                        <span class="tag">Framework</span>
+                    </div>
+                    <a href="#" class="repo-link">
+                        리포지토리 방문
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 8.5H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="category">
+            <h2 class="category-title">🛠️ 개발 도구</h2>
+            <div class="repos-grid">
+                <div class="repo-card">
+                    <div class="repo-header">
+                        <div class="repo-icon">⚡</div>
+                        <div class="repo-name">Lightning-fast Code Editor</div>
+                    </div>
+                    <div class="repo-description">
+                        Rust로 작성된 초고속 강력한 코드 에디터입니다. 뛰어난 성능과 현대적인 기능을 제공합니다.
+                    </div>
+                    <div class="repo-tags">
+                        <span class="tag">Code Editor</span>
+                        <span class="tag">Rust</span>
+                        <span class="tag">Performance</span>
+                    </div>
+                    <a href="#" class="repo-link">
+                        리포지토리 방문
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 8.5H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>
+                        </svg>
+                    </a>
+                </div>
+
+                <div class="repo-card">
+                    <div class="repo-header">
+                        <div class="repo-icon">🪟</div>
+                        <div class="repo-name">AeroSpace</div>
+                    </div>
+                    <div class="repo-description">
+                        macOS용 i3 스타일 타일링 윈도우 매니저입니다. 효율적인 창 관리와 키보드 중심의 워크플로우를 제공합니다.
+                    </div>
+                    <div class="repo-tags">
+                        <span class="tag">Window Manager</span>
+                        <span class="tag">macOS</span>
+                        <span class="tag">Tiling</span>
+                    </div>
+                    <a href="#" class="repo-link">
+                        리포지토리 방문
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 8.5H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>
+                        </svg>
+                    </a>
+                </div>
+
+                <div class="repo-card">
+                    <div class="repo-header">
+                        <div class="repo-icon">💻</div>
+                        <div class="repo-name">Windows Terminal</div>
+                    </div>
+                    <div class="repo-description">
+                        새로운 Windows 터미널과 기존 Windows 콘솔 호스트를 하나로 통합한 Microsoft의 공식 터미널 애플리케이션입니다.
+                    </div>
+                    <div class="repo-tags">
+                        <span class="tag">Terminal</span>
+                        <span class="tag">Windows</span>
+                        <span class="tag">Microsoft</span>
+                    </div>
+                    <a href="#" class="repo-link">
+                        리포지토리 방문
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 8.5H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="category">
+            <h2 class="category-title">📚 학습 리소스</h2>
+            <div class="repos-grid">
+                <div class="repo-card">
+                    <div class="repo-header">
+                        <div class="repo-icon">🎓</div>
+                        <div class="repo-name">Generative AI for Beginners</div>
+                    </div>
+                    <div class="repo-description">
+                        Microsoft에서 제공하는 21개 레슨으로 구성된 생성형 AI 학습 과정입니다. 초보자도 쉽게 시작할 수 있습니다.
+                    </div>
+                    <div class="repo-tags">
+                        <span class="tag">Education</span>
+                        <span class="tag">Generative AI</span>
+                        <span class="tag">Tutorial</span>
+                    </div>
+                    <a href="https://microsoft.github.io/generative-ai-for-beginners/" class="repo-link" target="_blank">
+                        리포지토리 방문
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 8.5H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>
+                        </svg>
+                    </a>
+                </div>
+
+                <div class="repo-card">
+                    <div class="repo-header">
+                        <div class="repo-icon">💡</div>
+                        <div class="repo-name">DevOps Interview Questions</div>
+                    </div>
+                    <div class="repo-description">
+                        Linux, Jenkins, AWS, Docker, Kubernetes 등 DevOps 관련 면접 질문 모음입니다. 취업 준비에 매우 유용합니다.
+                    </div>
+                    <div class="repo-tags">
+                        <span class="tag">DevOps</span>
+                        <span class="tag">Interview</span>
+                        <span class="tag">Learning</span>
+                    </div>
+                    <a href="#" class="repo-link">
+                        리포지토리 방문
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 8.5H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>
+                        </svg>
+                    </a>
+                </div>
+
+                <div class="repo-card">
+                    <div class="repo-header">
+                        <div class="repo-icon">🔧</div>
+                        <div class="repo-name">Build Your Own X</div>
+                    </div>
+                    <div class="repo-description">
+                        좋아하는 기술을 처음부터 재구현하며 프로그래밍을 마스터하는 학습 프로젝트 모음입니다.
+                    </div>
+                    <div class="repo-tags">
+                        <span class="tag">Programming</span>
+                        <span class="tag">Tutorial</span>
+                        <span class="tag">Learning</span>
+                    </div>
+                    <a href="#" class="repo-link">
+                        리포지토리 방문
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 8.5H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 현재 날짜 표시
+        const dateElement = document.getElementById('current-date');
+        const today = new Date();
+        const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+        dateElement.textContent = today.toLocaleDateString('ko-KR', options);
+
+        // 카드 hover 효과
+        const cards = document.querySelectorAll('.repo-card');
+        cards.forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-5px)';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
             });
         });
-        
-        await browser.close();
-        return repos;
-        
-    } catch (error) {
-        await browser.close();
-        throw error;
-    }
-}
 
-// API 엔드포인트
-app.get('/api/trending', async (req, res) => {
-    try {
-        const repos = await scrapeTrending();
-        res.json({ success: true, data: repos });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
+        // 스크롤 애니메이션
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
 
-// 정적 HTML 파일 제공
-app.use(express.static('public'));
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
 
-// 서버 시작
-const PORT = 3000;
-app.listen(PORT, () => {
-    console.log(`서버가 http://localhost:${PORT} 에서 실행중입니다`);
-});
-
-// ===== 클라이언트 측 JavaScript (HTML에 추가) =====
-// 이 코드를 HTML 파일의 <script> 태그 안에 추가하세요
-
-async function fetchTrendingRepos() {
-    try {
-        const response = await fetch('http://localhost:3000/api/trending');
-        const data = await response.json();
-        
-        if (data.success) {
-            updateRepoCards(data.data);
-        }
-    } catch (error) {
-        console.error('트렌딩 데이터를 가져오는데 실패했습니다:', error);
-    }
-}
-
-function updateRepoCards(repos) {
-    // AI 관련 키워드
-    const aiKeywords = ['ai', 'ml', 'machine learning', 'deep learning', 'neural', 'gpt', 'llm'];
-    
-    // 개발 도구 관련 키워드
-    const devToolKeywords = ['editor', 'ide', 'terminal', 'cli', 'tool', 'framework'];
-    
-    // 리포지토리 분류
-    const aiRepos = repos.filter(repo => 
-        aiKeywords.some(keyword => 
-            repo.description.toLowerCase().includes(keyword) ||
-            repo.name.toLowerCase().includes(keyword)
-        )
-    );
-    
-    const devRepos = repos.filter(repo =>
-        devToolKeywords.some(keyword =>
-            repo.description.toLowerCase().includes(keyword) ||
-            repo.name.toLowerCase().includes(keyword)
-        )
-    );
-    
-    // DOM 업데이트
-    updateCategoryRepos('ai-repos', aiRepos);
-    updateCategoryRepos('dev-repos', devRepos);
-}
-
-function updateCategoryRepos(containerId, repos) {
-    const container = document.getElementById(containerId);
-    container.innerHTML = '';
-    
-    repos.forEach(repo => {
-        const card = createRepoCard(repo);
-        container.appendChild(card);
-    });
-}
-
-function createRepoCard(repo) {
-    const card = document.createElement('div');
-    card.className = 'repo-card';
-    
-    card.innerHTML = `
-        <div class="repo-header">
-            <div class="repo-icon">${getRepoIcon(repo)}</div>
-            <div class="repo-name">${repo.name}</div>
-        </div>
-        <div class="repo-description">${repo.description}</div>
-        <div class="repo-tags">
-            ${repo.language ? `<span class="tag">${repo.language}</span>` : ''}
-            <span class="tag">⭐ ${repo.stars}</span>
-        </div>
-        <a href="${repo.url}" class="repo-link" target="_blank">
-            리포지토리 방문
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 8.5H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>
-            </svg>
-        </a>
-    `;
-    
-    return card;
-}
-
-function getRepoIcon(repo) {
-    const desc = repo.description.toLowerCase();
-    if (desc.includes('ai') || desc.includes('ml')) return '🤖';
-    if (desc.includes('tool') || desc.includes('editor')) return '🛠️';
-    if (desc.includes('learn') || desc.includes('tutorial')) return '📚';
-    return '📦';
-}
-
-// 페이지 로드 시 실행
-document.addEventListener('DOMContentLoaded', fetchTrendingRepos);
-
-// 30분마다 자동 업데이트
-setInterval(fetchTrendingRepos, 30 * 60 * 1000);
+        document.querySelectorAll('.repo-card').forEach(card => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+            observer.observe(card);
+        });
+    </script>
+</body>
+</html>
