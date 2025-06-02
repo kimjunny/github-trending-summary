@@ -1,0 +1,159 @@
+// Node.js 서버 예제 (Express + Puppeteer)
+const express = require('express');
+const puppeteer = require('puppeteer');
+const app = express();
+
+// CORS 설정
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    next();
+});
+
+// GitHub 트렌딩 스크래핑 함수
+async function scrapeTrending() {
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+    
+    try {
+        await page.goto('https://github.com/trending');
+        
+        // 트렌딩 리포지토리 정보 추출
+        const repos = await page.evaluate(() => {
+            const repoElements = document.querySelectorAll('article.Box-row');
+            
+            return Array.from(repoElements).map(repo => {
+                const nameElement = repo.querySelector('h2 a');
+                const descElement = repo.querySelector('p');
+                const langElement = repo.querySelector('[itemprop="programmingLanguage"]');
+                const starsElement = repo.querySelector('svg.octicon-star').parentElement;
+                
+                return {
+                    name: nameElement ? nameElement.textContent.trim() : '',
+                    url: nameElement ? 'https://github.com' + nameElement.getAttribute('href') : '',
+                    description: descElement ? descElement.textContent.trim() : '',
+                    language: langElement ? langElement.textContent.trim() : '',
+                    stars: starsElement ? starsElement.textContent.trim() : ''
+                };
+            });
+        });
+        
+        await browser.close();
+        return repos;
+        
+    } catch (error) {
+        await browser.close();
+        throw error;
+    }
+}
+
+// API 엔드포인트
+app.get('/api/trending', async (req, res) => {
+    try {
+        const repos = await scrapeTrending();
+        res.json({ success: true, data: repos });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// 정적 HTML 파일 제공
+app.use(express.static('public'));
+
+// 서버 시작
+const PORT = 3000;
+app.listen(PORT, () => {
+    console.log(`서버가 http://localhost:${PORT} 에서 실행중입니다`);
+});
+
+// ===== 클라이언트 측 JavaScript (HTML에 추가) =====
+// 이 코드를 HTML 파일의 <script> 태그 안에 추가하세요
+
+async function fetchTrendingRepos() {
+    try {
+        const response = await fetch('http://localhost:3000/api/trending');
+        const data = await response.json();
+        
+        if (data.success) {
+            updateRepoCards(data.data);
+        }
+    } catch (error) {
+        console.error('트렌딩 데이터를 가져오는데 실패했습니다:', error);
+    }
+}
+
+function updateRepoCards(repos) {
+    // AI 관련 키워드
+    const aiKeywords = ['ai', 'ml', 'machine learning', 'deep learning', 'neural', 'gpt', 'llm'];
+    
+    // 개발 도구 관련 키워드
+    const devToolKeywords = ['editor', 'ide', 'terminal', 'cli', 'tool', 'framework'];
+    
+    // 리포지토리 분류
+    const aiRepos = repos.filter(repo => 
+        aiKeywords.some(keyword => 
+            repo.description.toLowerCase().includes(keyword) ||
+            repo.name.toLowerCase().includes(keyword)
+        )
+    );
+    
+    const devRepos = repos.filter(repo =>
+        devToolKeywords.some(keyword =>
+            repo.description.toLowerCase().includes(keyword) ||
+            repo.name.toLowerCase().includes(keyword)
+        )
+    );
+    
+    // DOM 업데이트
+    updateCategoryRepos('ai-repos', aiRepos);
+    updateCategoryRepos('dev-repos', devRepos);
+}
+
+function updateCategoryRepos(containerId, repos) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    
+    repos.forEach(repo => {
+        const card = createRepoCard(repo);
+        container.appendChild(card);
+    });
+}
+
+function createRepoCard(repo) {
+    const card = document.createElement('div');
+    card.className = 'repo-card';
+    
+    card.innerHTML = `
+        <div class="repo-header">
+            <div class="repo-icon">${getRepoIcon(repo)}</div>
+            <div class="repo-name">${repo.name}</div>
+        </div>
+        <div class="repo-description">${repo.description}</div>
+        <div class="repo-tags">
+            ${repo.language ? `<span class="tag">${repo.language}</span>` : ''}
+            <span class="tag">⭐ ${repo.stars}</span>
+        </div>
+        <a href="${repo.url}" class="repo-link" target="_blank">
+            리포지토리 방문
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 8.5H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"/>
+            </svg>
+        </a>
+    `;
+    
+    return card;
+}
+
+function getRepoIcon(repo) {
+    const desc = repo.description.toLowerCase();
+    if (desc.includes('ai') || desc.includes('ml')) return '🤖';
+    if (desc.includes('tool') || desc.includes('editor')) return '🛠️';
+    if (desc.includes('learn') || desc.includes('tutorial')) return '📚';
+    return '📦';
+}
+
+// 페이지 로드 시 실행
+document.addEventListener('DOMContentLoaded', fetchTrendingRepos);
+
+// 30분마다 자동 업데이트
+setInterval(fetchTrendingRepos, 30 * 60 * 1000);
